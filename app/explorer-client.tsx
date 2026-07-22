@@ -31,6 +31,17 @@ const normalizeType = (type: string) => type.trim().toLowerCase();
 const typeLabel = (type: string) => TYPE_LABELS[normalizeType(type)] ?? type;
 const iconUrl = (type: string) => `https://ninesolsmap.com/icons/${normalizeType(type)}.png`;
 const inGrottoWest = (marker: MarkerData) => marker.x >= -0.106 && marker.x <= -0.056 && marker.y >= 0.68 && marker.y <= 0.775;
+const PROGRESS_STORAGE_KEY = "nine-sols-map-progress-v1";
+const localAssetUrl = (path: string) => typeof window === "undefined" ? path : new URL(path.replace(/^\//, ""), document.baseURI).toString();
+
+function readSavedProgress() {
+  try {
+    const value = JSON.parse(window.localStorage.getItem(PROGRESS_STORAGE_KEY) ?? "[]") as unknown;
+    return new Set(Array.isArray(value) ? value.filter((id): id is string => typeof id === "string") : []);
+  } catch {
+    return new Set<string>();
+  }
+}
 
 export default function ExplorerClient() {
   const mapElementRef = useRef<HTMLDivElement>(null);
@@ -51,12 +62,11 @@ export default function ExplorerClient() {
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([fetch("/api/markers"), fetch("/api/progress")])
-      .then(async ([markersResponse, progressResponse]) => {
+    fetch(localAssetUrl("markers.json"))
+      .then(async (markersResponse) => {
         if (!markersResponse.ok) throw new Error("marker-data");
         const markerPayload = (await markersResponse.json()) as MarkerData[];
-        const progressPayload = progressResponse.ok ? ((await progressResponse.json()) as { completedIds: string[] }) : { completedIds: [] };
-        if (!cancelled) { setMarkers(markerPayload); setCompletedIds(new Set(progressPayload.completedIds)); }
+        if (!cancelled) { setMarkers(markerPayload); setCompletedIds(readSavedProgress()); }
       })
       .catch(() => { if (!cancelled) setToast("지도 데이터를 불러오지 못했습니다. 잠시 뒤 새로고침해 주세요."); })
       .finally(() => { if (!cancelled) setLoading(false); });
@@ -101,22 +111,18 @@ export default function ExplorerClient() {
   const progressPercent = scopedMarkers.length ? Math.round((completedInScope / scopedMarkers.length) * 100) : 0;
   const typeOptions = useMemo(() => [...new Set(scopedMarkers.map((marker) => normalizeType(marker.type)))].sort((a, b) => typeLabel(a).localeCompare(typeLabel(b), "ko")), [scopedMarkers]);
 
-  const toggleComplete = useCallback(async (markerId: string) => {
-    let nextCompleted = false;
-    setCompletedIds((current) => {
-      const next = new Set(current); nextCompleted = !next.has(markerId);
-      if (nextCompleted) next.add(markerId); else next.delete(markerId); return next;
-    });
+  const toggleComplete = useCallback((markerId: string) => {
+    const next = new Set(completedIds); const nextCompleted = !next.has(markerId);
+    if (nextCompleted) next.add(markerId); else next.delete(markerId);
+    setCompletedIds(next);
     try {
-      const response = await fetch("/api/progress", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ markerId, completed: nextCompleted }) });
-      if (!response.ok) throw new Error("save-failed");
+      window.localStorage.setItem(PROGRESS_STORAGE_KEY, JSON.stringify([...next]));
       setToast(nextCompleted ? "획득 완료로 저장했습니다." : "체크를 되돌렸습니다.");
     } catch {
-      setCompletedIds((current) => { const next = new Set(current); if (nextCompleted) next.delete(markerId); else next.add(markerId); return next; });
-      setToast("저장하지 못했습니다. 다시 시도해 주세요.");
+      setToast("브라우저 저장소를 사용할 수 없어 이번 화면에만 반영했습니다.");
     }
-  }, []);
-  toggleCompleteRef.current = (id) => void toggleComplete(id);
+  }, [completedIds]);
+  useEffect(() => { toggleCompleteRef.current = toggleComplete; }, [toggleComplete]);
 
   useEffect(() => { if (!toast) return; const timer = window.setTimeout(() => setToast(null), 2200); return () => window.clearTimeout(timer); }, [toast]);
 
@@ -171,7 +177,7 @@ export default function ExplorerClient() {
     <main className="app-shell">
       <header className="topbar">
         <div className="brand"><div className="brand-mark" aria-hidden="true">九</div><div><h1>나인 솔즈 탐사 지도</h1><p>Item tracker & route guide</p></div></div>
-        <div className="top-stats"><span className="save-state">개인 진행도 저장 중</span><span className="top-progress"><strong>{completedInScope}</strong> / {scopedMarkers.length}</span></div>
+        <div className="top-stats"><span className="save-state">이 브라우저에 저장됨</span><span className="top-progress"><strong>{completedInScope}</strong> / {scopedMarkers.length}</span></div>
       </header>
       <div className="workspace">
         <aside className="side-panel" aria-label="지도 탐색 도구"><div className="panel-scroll">
@@ -181,7 +187,7 @@ export default function ExplorerClient() {
           {viewMode === "grotto" && <section>
             <div className="section-title"><h3>석굴 연결 오버레이</h3><div className="route-toggle"><span>7쌍</span><button className={`toggle-button ${showConnections ? "on" : ""}`} onClick={() => setShowConnections((value) => !value)}>{showConnections ? "표시 중" : "숨김"}</button></div></div>
             <div className="route-grid">{CONNECTIONS.map((pair) => <button className="route-button" key={pair.id} onClick={() => focusConnection(pair)}><span className="route-swatch" style={{ background: pair.color, color: pair.color }} /><b>{pair.id} · {pair.name}</b></button>)}</div>
-            <details className="reference-card"><summary>첨부한 손그림 같이 보기</summary><img src="/grotto-west-connections.png" alt="색으로 연결 지점을 표시한 도교 석굴 서쪽 손그림" /><p>손그림의 같은 색 표시를 A–G 연결선으로 옮겼습니다. 위치를 다듬고 싶을 때 이 원본과 바로 비교할 수 있어요.</p></details>
+            <details className="reference-card"><summary>첨부한 손그림 같이 보기</summary><img src={localAssetUrl("grotto-west-connections.png")} alt="색으로 연결 지점을 표시한 도교 석굴 서쪽 손그림" /><p>손그림의 같은 색 표시를 A–G 연결선으로 옮겼습니다. 위치를 다듬고 싶을 때 이 원본과 바로 비교할 수 있어요.</p></details>
           </section>}
           <section>
             <div className="section-title"><h3>아이템 & 상호작용</h3><span>{loading ? "불러오는 중" : `${visibleMarkers.length}개 표시`}</span></div>
