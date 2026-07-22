@@ -7,10 +7,11 @@ import { isCheckableType, localizedMarkerDescription } from "./marker-localizati
 type MarkerData = { id: string; x: number; y: number; type: string; description: string };
 type ViewMode = "grotto" | "all";
 type ConnectionPair = { id: string; name: string; color: string; from: [number, number]; to: [number, number]; curve: [number, number] };
+type MarkerGroup = { name: string; markers: MarkerData[] };
 
 const GROTTO_CENTER: [number, number] = [-0.0815, 0.7315];
 const WORLD_CENTER: [number, number] = [-0.0972900390625, 0.443359375];
-const APP_VERSION = "2026.07.23-1";
+const APP_VERSION = "2026.07.23-2";
 
 const CONNECTIONS: ConnectionPair[] = [
   { id: "A", name: "보라 연결", color: "#9a6bdb", from: [-0.0657, 0.7194], to: [-0.0822, 0.7131], curve: [-0.073, 0.706] },
@@ -33,6 +34,7 @@ const normalizeType = (type: string) => type.trim().toLowerCase();
 const typeLabel = (type: string) => TYPE_LABELS[normalizeType(type)] ?? type;
 const iconUrl = (type: string) => `https://ninesolsmap.com/icons/${normalizeType(type)}.png`;
 const inGrottoWest = (marker: MarkerData) => marker.x >= -0.106 && marker.x <= -0.056 && marker.y >= 0.68 && marker.y <= 0.775;
+const markerDistanceSquared = (a: MarkerData, b: MarkerData) => ((a.x - b.x) ** 2) + ((a.y - b.y) ** 2);
 const PROGRESS_STORAGE_KEY = "nine-sols-map-progress-v1";
 const SAVE_DATA_PREFIX = "NINESOLS-MAP-V1:";
 const localAssetUrl = (path: string) => typeof window === "undefined" ? path : new URL(path.replace(/^\//, ""), document.baseURI).toString();
@@ -134,6 +136,27 @@ export default function ExplorerClient() {
   const completedInScope = useMemo(() => scopedCheckableMarkers.filter((marker) => completedIds.has(marker.id)).length, [scopedCheckableMarkers, completedIds]);
   const progressPercent = scopedCheckableMarkers.length ? Math.round((completedInScope / scopedCheckableMarkers.length) * 100) : 0;
   const typeOptions = useMemo(() => [...new Set(scopedMarkers.map((marker) => normalizeType(marker.type)))].sort((a, b) => typeLabel(a).localeCompare(typeLabel(b), "ko")), [scopedMarkers]);
+  const markerGroups = useMemo(() => {
+    const rootAnchors = scopedMarkers.filter((marker) => normalizeType(marker.type) === "root");
+    const groups = new Map<string, MarkerData[]>();
+
+    visibleMarkers.forEach((marker) => {
+      const nearestRoot = rootAnchors.reduce<MarkerData | null>((closest, candidate) => {
+        if (!closest) return candidate;
+        return markerDistanceSquared(marker, candidate) < markerDistanceSquared(marker, closest) ? candidate : closest;
+      }, null);
+      const areaName = nearestRoot
+        ? localizedMarkerDescription(nearestRoot).replace(/\s*뿌리 노드$/, "")
+        : "기타 지역";
+      const group = groups.get(areaName) ?? [];
+      group.push(marker);
+      groups.set(areaName, group);
+    });
+
+    return [...groups.entries()]
+      .map(([name, groupedMarkers]): MarkerGroup => ({ name, markers: groupedMarkers }))
+      .sort((a, b) => a.name.localeCompare(b.name, "ko"));
+  }, [scopedMarkers, visibleMarkers]);
 
   const toggleComplete = useCallback((markerId: string) => {
     if (!checkableMarkerIds.has(markerId)) return;
@@ -224,7 +247,20 @@ export default function ExplorerClient() {
   };
   const focusMarker = (marker: MarkerData) => { mapRef.current?.setView([marker.x, marker.y], 15, { animate: true }); window.setTimeout(() => markerRefs.current.get(marker.id)?.openPopup(), 280); };
   const focusConnection = (pair: ConnectionPair) => { mapRef.current?.fitBounds([pair.from, pair.to], { padding: [100, 100], maxZoom: 15, animate: true }); };
-  const listMarkers = visibleMarkers.slice(0, 80);
+  const groupFilterKey = `${viewMode}:${selectedType}:${query.trim().toLowerCase()}:${hideCompleted}`;
+  const expandMarkerGroups = viewMode === "grotto" || selectedType !== "all" || query.trim() !== "" || hideCompleted;
+  const renderMarkerRow = (marker: MarkerData) => {
+    const checkable = isCheckableType(marker.type);
+    const completed = checkable && completedIds.has(marker.id);
+    const localizedDescription = localizedMarkerDescription(marker);
+    return <button className={`list-row ${completed ? "completed" : ""}`} key={marker.id} onClick={() => focusMarker(marker)}>
+      <img className="list-icon" src={iconUrl(marker.type)} alt="" />
+      <span className="list-copy"><strong>{localizedDescription}</strong><span>{typeLabel(marker.type)}</span></span>
+      {checkable
+        ? <span className="check-dot" role="checkbox" aria-checked={completed} aria-label={`${localizedDescription} 획득 여부`} onClick={(event) => { event.stopPropagation(); toggleComplete(marker.id); }}>✓</span>
+        : <span className="view-only-badge">위치</span>}
+    </button>;
+  };
 
   return (
     <main className="app-shell">
@@ -247,23 +283,21 @@ export default function ExplorerClient() {
             <details className="reference-card"><summary>첨부한 손그림 같이 보기</summary><img src={localAssetUrl("grotto-west-connections.png")} alt="색으로 연결 지점을 표시한 도교 석굴 서쪽 손그림" /><p>손그림의 같은 색 표시를 A–G 연결선으로 옮겼습니다. 위치를 다듬고 싶을 때 이 원본과 바로 비교할 수 있어요.</p></details>
           </section>}
           <section>
-            <div className="section-title"><h3>지도 표시</h3><span>{loading ? "불러오는 중" : `${visibleMarkers.length}개 표시`}</span></div>
+            <div className="section-title"><h3>지도 표시</h3><span>{loading ? "불러오는 중" : `${markerGroups.length}개 맵 · ${visibleMarkers.length}개`}</span></div>
             <div className="controls"><label className="search-field"><span className="sr-only">지도 표시 검색</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="한국어 이름 검색" /></label><div className="control-line"><select className="type-select" value={selectedType} onChange={(event) => setSelectedType(event.target.value)} aria-label="표시 종류"><option value="all">모든 종류</option>{typeOptions.map((type) => <option value={type} key={type}>{typeLabel(type)}</option>)}</select><button className={`soft-button ${hideCompleted ? "active" : ""}`} onClick={() => setHideCompleted((value) => !value)}>완료 숨김</button></div></div>
             <div className="marker-list">
-              {listMarkers.map((marker) => {
-                const checkable = isCheckableType(marker.type);
-                const completed = checkable && completedIds.has(marker.id);
-                const localizedDescription = localizedMarkerDescription(marker);
-                return <button className={`list-row ${completed ? "completed" : ""}`} key={marker.id} onClick={() => focusMarker(marker)}>
-                  <img className="list-icon" src={iconUrl(marker.type)} alt="" />
-                  <span className="list-copy"><strong>{localizedDescription}</strong><span>{typeLabel(marker.type)}</span></span>
-                  {checkable
-                    ? <span className="check-dot" role="checkbox" aria-checked={completed} aria-label={`${localizedDescription} 획득 여부`} onClick={(event) => { event.stopPropagation(); toggleComplete(marker.id); }}>✓</span>
-                    : <span className="view-only-badge">위치</span>}
-                </button>;
+              {markerGroups.map((group) => {
+                const checkableMarkers = group.markers.filter((marker) => isCheckableType(marker.type));
+                const completedMarkers = checkableMarkers.filter((marker) => completedIds.has(marker.id)).length;
+                return <details className="marker-group" key={`${group.name}:${groupFilterKey}`} defaultOpen={expandMarkerGroups}>
+                  <summary>
+                    <span className="marker-group-name">{group.name}</span>
+                    <span className="marker-group-progress">{checkableMarkers.length > 0 && `${completedMarkers}/${checkableMarkers.length} 획득 · `}{group.markers.length}개</span>
+                  </summary>
+                  <div className="marker-group-rows">{group.markers.map(renderMarkerRow)}</div>
+                </details>;
               })}
-              {!loading && listMarkers.length === 0 && <div className="empty-state">조건에 맞는 표시가 없습니다.</div>}
-              {visibleMarkers.length > listMarkers.length && <div className="more-row">지도에는 나머지 {visibleMarkers.length - listMarkers.length}개 아이콘도 표시됩니다.</div>}
+              {!loading && markerGroups.length === 0 && <div className="empty-state">조건에 맞는 표시가 없습니다.</div>}
             </div>
           </section>
           <p className="source-note">지도 타일과 아이콘 위치는 <a href="https://ninesolsmap.com/en" target="_blank" rel="noreferrer">나인 솔즈 인터랙티브 지도</a>의 공개 데이터를 사용합니다. 이름은 한국어로 옮겼고, 연결 정보는 첨부한 손그림을 바탕으로 표시했습니다.</p>

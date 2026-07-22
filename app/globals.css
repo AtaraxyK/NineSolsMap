@@ -88,6 +88,14 @@ body { color: var(--ink); font-family: "Pretendard Variable", Pretendard, "Noto 
 .soft-button.active { color: var(--ink); border-color: rgba(159,216,191,.28); background: rgba(159,216,191,.08); }
 
 .marker-list { display: grid; gap: 7px; margin-top: 9px; }
+.marker-group { overflow: hidden; border: 1px solid var(--line); border-radius: 12px; background: rgba(255,255,255,.018); }
+.marker-group summary { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 10px; padding: 11px 12px; cursor: pointer; list-style: none; }
+.marker-group summary::-webkit-details-marker { display: none; }
+.marker-group summary::before { content: "+"; grid-column: 2; grid-row: 1; color: var(--accent-soft); font-size: 16px; line-height: 1; }
+.marker-group[open] summary::before { content: "−"; }
+.marker-group-name { grid-column: 1; grid-row: 1; min-width: 0; overflow: hidden; color: #dce4e1; font-size: 12px; font-weight: 740; text-overflow: ellipsis; white-space: nowrap; }
+.marker-group-progress { grid-column: 1 / -1; grid-row: 2; color: var(--muted); font-size: 10px; }
+.marker-group-rows { display: grid; gap: 6px; padding: 0 7px 7px; }
 .list-row { width: 100%; display: grid; grid-template-columns: 34px 1fr 24px; align-items: center; gap: 9px; padding: 9px; border-radius: 11px; border: 1px solid transparent; background: rgba(255,255,255,.025); text-align: left; }
 .list-row:hover, .list-row:focus-visible { border-color: var(--line); background: rgba(255,255,255,.055); outline: none; }
 .list-row.completed { opacity: .48; }

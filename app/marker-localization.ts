@@ -15,6 +15,16 @@ export const CHECKABLE_TYPES = new Set([
   "vial",
 ]);
 
+const VIEW_ONLY_TYPES = new Set([
+  "boss",
+  "chiyou",
+  "hack",
+  "miniboss",
+  "robot",
+  "root",
+  "shanhai",
+]);
+
 const ARTIFACT_NAMES: Record<string, string> = {
   "Tiandao Academy Periodical": "천도 연구원 정기간행물",
   "Antique Vinyl Record": "골동품 음반",
@@ -217,7 +227,8 @@ function localizeArea(description: string) {
 }
 
 export function isCheckableType(type: string) {
-  return CHECKABLE_TYPES.has(type.trim().toLowerCase());
+  const normalizedType = type.trim().toLowerCase();
+  return !VIEW_ONLY_TYPES.has(normalizedType) && CHECKABLE_TYPES.has(normalizedType);
 }
 
 export function localizedMarkerDescription(marker: LocalizableMarker) {
