@@ -2,11 +2,12 @@ import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
 export default defineConfig({
+  root: "pages",
   base: "/NineSolsMap/",
   plugins: [react()],
-  publicDir: "public",
+  publicDir: "../public",
   build: {
-    outDir: "pages-dist",
+    outDir: "../pages-dist",
     emptyOutDir: true,
   },
 });
