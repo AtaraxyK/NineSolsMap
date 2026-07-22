@@ -11,7 +11,7 @@ type MarkerGroup = { name: string; markers: MarkerData[] };
 
 const GROTTO_CENTER: [number, number] = [-0.0815, 0.7315];
 const WORLD_CENTER: [number, number] = [-0.0972900390625, 0.443359375];
-const APP_VERSION = "2026.07.23-2";
+const APP_VERSION = "2026.07.23-3";
 
 const CONNECTIONS: ConnectionPair[] = [
   { id: "A", name: "보라 연결", color: "#9a6bdb", from: [-0.0657, 0.7194], to: [-0.0822, 0.7131], curve: [-0.073, 0.706] },
@@ -77,6 +77,7 @@ export default function ExplorerClient() {
   const [viewMode, setViewMode] = useState<ViewMode>("grotto");
   const [showConnections, setShowConnections] = useState(true);
   const [selectedType, setSelectedType] = useState("all");
+  const [selectedArea, setSelectedArea] = useState("도교 석굴 서쪽");
   const [query, setQuery] = useState("");
   const [hideCompleted, setHideCompleted] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -206,7 +207,13 @@ export default function ExplorerClient() {
         const isComplete = checkable && completedIds.has(markerData.id);
         const localizedDescription = localizedMarkerDescription(markerData);
         const icon = L.divIcon({ className: "marker-icon", html: `<div class="marker-badge${isComplete ? " is-complete" : ""}"><img src="${iconUrl(markerData.type)}" alt="" /></div>`, iconSize: [34, 34], iconAnchor: [17, 17], popupAnchor: [0, -17] });
-        const marker = L.marker([markerData.x, markerData.y], { icon, title: `${typeLabel(markerData.type)}: ${localizedDescription}`, alt: localizedDescription });
+        const markerType = normalizeType(markerData.type);
+        const marker = L.marker([markerData.x, markerData.y], {
+          icon,
+          title: `${typeLabel(markerData.type)}: ${localizedDescription}`,
+          alt: localizedDescription,
+          zIndexOffset: markerType === "boss" || markerType === "miniboss" ? 1000 : 0,
+        });
         const popup = document.createElement("div");
         const type = document.createElement("div"); type.className = "popup-type"; type.textContent = typeLabel(markerData.type);
         const description = document.createElement("div"); description.className = "popup-description"; description.textContent = localizedDescription;
@@ -242,13 +249,14 @@ export default function ExplorerClient() {
   }, [showConnections, viewMode]);
 
   const changeView = (nextMode: ViewMode) => {
-    setViewMode(nextMode); setSelectedType("all"); setQuery(""); const map = mapRef.current; if (!map) return;
+    setViewMode(nextMode); setSelectedType("all"); setSelectedArea(nextMode === "grotto" ? "도교 석굴 서쪽" : ""); setQuery(""); const map = mapRef.current; if (!map) return;
     map.setView(nextMode === "grotto" ? GROTTO_CENTER : WORLD_CENTER, nextMode === "grotto" ? 14 : 13, { animate: true });
   };
   const focusMarker = (marker: MarkerData) => { mapRef.current?.setView([marker.x, marker.y], 15, { animate: true }); window.setTimeout(() => markerRefs.current.get(marker.id)?.openPopup(), 280); };
   const focusConnection = (pair: ConnectionPair) => { mapRef.current?.fitBounds([pair.from, pair.to], { padding: [100, 100], maxZoom: 15, animate: true }); };
-  const groupFilterKey = `${viewMode}:${selectedType}:${query.trim().toLowerCase()}:${hideCompleted}`;
-  const expandMarkerGroups = viewMode === "grotto" || selectedType !== "all" || query.trim() !== "" || hideCompleted;
+  const selectedMarkerGroup = markerGroups.find((group) => group.name === selectedArea) ?? null;
+  const selectedGroupCheckable = selectedMarkerGroup?.markers.filter((marker) => isCheckableType(marker.type)) ?? [];
+  const selectedGroupCompleted = selectedGroupCheckable.filter((marker) => completedIds.has(marker.id)).length;
   const renderMarkerRow = (marker: MarkerData) => {
     const checkable = isCheckableType(marker.type);
     const completed = checkable && completedIds.has(marker.id);
@@ -283,21 +291,21 @@ export default function ExplorerClient() {
             <details className="reference-card"><summary>첨부한 손그림 같이 보기</summary><img src={localAssetUrl("grotto-west-connections.png")} alt="색으로 연결 지점을 표시한 도교 석굴 서쪽 손그림" /><p>손그림의 같은 색 표시를 A–G 연결선으로 옮겼습니다. 위치를 다듬고 싶을 때 이 원본과 바로 비교할 수 있어요.</p></details>
           </section>}
           <section>
-            <div className="section-title"><h3>지도 표시</h3><span>{loading ? "불러오는 중" : `${markerGroups.length}개 맵 · ${visibleMarkers.length}개`}</span></div>
+            <div className="section-title"><h3>지도 표시</h3><span>{loading ? "불러오는 중" : `지도에 ${visibleMarkers.length}개`}</span></div>
             <div className="controls"><label className="search-field"><span className="sr-only">지도 표시 검색</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="한국어 이름 검색" /></label><div className="control-line"><select className="type-select" value={selectedType} onChange={(event) => setSelectedType(event.target.value)} aria-label="표시 종류"><option value="all">모든 종류</option>{typeOptions.map((type) => <option value={type} key={type}>{typeLabel(type)}</option>)}</select><button className={`soft-button ${hideCompleted ? "active" : ""}`} onClick={() => setHideCompleted((value) => !value)}>완료 숨김</button></div></div>
+            <label className="area-select-field">
+              <span>목록으로 볼 맵 구역</span>
+              <select className="area-select" value={selectedArea} onChange={(event) => setSelectedArea(event.target.value)} aria-label="목록으로 볼 맵 구역">
+                <option value="">목록 숨기기</option>
+                {markerGroups.map((group) => <option value={group.name} key={group.name}>{group.name} · {group.markers.length}개</option>)}
+              </select>
+            </label>
             <div className="marker-list">
-              {markerGroups.map((group) => {
-                const checkableMarkers = group.markers.filter((marker) => isCheckableType(marker.type));
-                const completedMarkers = checkableMarkers.filter((marker) => completedIds.has(marker.id)).length;
-                return <details className="marker-group" key={`${group.name}:${groupFilterKey}`} defaultOpen={expandMarkerGroups}>
-                  <summary>
-                    <span className="marker-group-name">{group.name}</span>
-                    <span className="marker-group-progress">{checkableMarkers.length > 0 && `${completedMarkers}/${checkableMarkers.length} 획득 · `}{group.markers.length}개</span>
-                  </summary>
-                  <div className="marker-group-rows">{group.markers.map(renderMarkerRow)}</div>
-                </details>;
-              })}
-              {!loading && markerGroups.length === 0 && <div className="empty-state">조건에 맞는 표시가 없습니다.</div>}
+              {selectedMarkerGroup && <>
+                <div className="selected-area-heading"><strong>{selectedMarkerGroup.name}</strong><span>{selectedGroupCheckable.length > 0 && `${selectedGroupCompleted}/${selectedGroupCheckable.length} 획득 · `}{selectedMarkerGroup.markers.length}개</span></div>
+                {selectedMarkerGroup.markers.map(renderMarkerRow)}
+              </>}
+              {!loading && !selectedMarkerGroup && <div className="empty-state">맵 구역을 선택하면 그 구역의 항목만 여기에 표시됩니다.</div>}
             </div>
           </section>
           <p className="source-note">지도 타일과 아이콘 위치는 <a href="https://ninesolsmap.com/en" target="_blank" rel="noreferrer">나인 솔즈 인터랙티브 지도</a>의 공개 데이터를 사용합니다. 이름은 한국어로 옮겼고, 연결 정보는 첨부한 손그림을 바탕으로 표시했습니다.</p>
