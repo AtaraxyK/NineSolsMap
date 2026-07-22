@@ -5,6 +5,7 @@ export const CHECKABLE_TYPES = new Set([
   "chest",
   "collectible",
   "cpu",
+  "data",
   "darksteel",
   "fruit",
   "herb",
@@ -193,6 +194,7 @@ function localizeItem(marker: LocalizableMarker) {
     else name = description.includes("chest") ? "기초 부품 상자" : "기초 부품";
   }
   if (type === "cpu") name = "계산 장치";
+  if (type === "data") name = "데이터 기록";
   if (type === "darksteel") name = "현철";
   if (type === "fruit") {
     if (description.startsWith("Twin Tao Fruit")) name = "쌍둥이 도과";

@@ -10,6 +10,7 @@ type ConnectionPair = { id: string; name: string; color: string; from: [number, 
 
 const GROTTO_CENTER: [number, number] = [-0.0815, 0.7315];
 const WORLD_CENTER: [number, number] = [-0.0972900390625, 0.443359375];
+const APP_VERSION = "2026.07.23-1";
 
 const CONNECTIONS: ConnectionPair[] = [
   { id: "A", name: "보라 연결", color: "#9a6bdb", from: [-0.0657, 0.7194], to: [-0.0822, 0.7131], curve: [-0.073, 0.706] },
@@ -229,11 +230,11 @@ export default function ExplorerClient() {
     <main className="app-shell">
       <header className="topbar">
         <div className="brand"><div className="brand-mark" aria-hidden="true">九</div><div><h1>나인 솔즈 탐사 지도</h1><p>아이템 체크 · 길찾기</p></div></div>
-        <div className="top-stats"><span className="save-state">이 브라우저에 저장됨</span><span className="top-progress"><strong>{completedInScope}</strong> / {scopedCheckableMarkers.length}</span></div>
+        <div className="top-stats"><span className="save-state">브라우저 저장 · {APP_VERSION}</span><span className="top-progress"><strong>{completedInScope}</strong> / {scopedCheckableMarkers.length}</span></div>
       </header>
       <div className="workspace">
         <aside className="side-panel" aria-label="지도 탐색 도구"><div className="panel-scroll">
-          <section className="intro"><p className="eyebrow">개인 탐사 기록</p><h2>{viewMode === "grotto" ? "도교 석굴 서쪽" : "신곤 전체 지도"}</h2><p className="intro-copy">획득 아이템만 체크할 수 있습니다. 보스·산해·뿌리 노드 같은 위치 정보는 지도에서 그대로 확인하세요.</p></section>
+          <section className="intro"><p className="eyebrow">개인 탐사 기록</p><h2>{viewMode === "grotto" ? "도교 석굴 서쪽" : "신곤 전체 지도"}</h2><p className="intro-copy">획득 아이템과 데이터 기록만 체크할 수 있습니다. 보스·산해·뿌리 노드 같은 위치 정보는 지도에서 그대로 확인하세요.</p></section>
           <div className="view-switch" aria-label="지도 범위 선택"><button className={viewMode === "grotto" ? "active" : ""} onClick={() => changeView("grotto")}>석굴 서쪽</button><button className={viewMode === "all" ? "active" : ""} onClick={() => changeView("all")}>전체 지도</button></div>
           <section className="progress-card" aria-label="아이템 획득 진행도"><div className="progress-row"><span>현재 범위 아이템</span><strong>{progressPercent}%</strong></div><div className="progress-track" aria-hidden="true"><i style={{ width: `${progressPercent}%` }} /></div></section>
           <section className="save-card" aria-label="세이브 데이터 옮기기">
